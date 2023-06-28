@@ -22,8 +22,8 @@
       real*4      phvel_all(pk),grvel_all(pk)
       real*4      attn_all(pk),per_all(pk)
       integer*4   lorder_all(pk)
-      integer*4   jcomin,wgravin,lminin,lmaxin
-      integer*4   wminin,wmaxin,nminin,nmaxin
+      integer*4   jcomin,wgravin,lminin,lmaxin,lmaxin2
+      integer*4   wminin,wmaxin,nminin,nmaxin,nmaxin2
       real*4      epsin
 
       real*4    per_eigen,phvel_eigen,grvel_eigen,attn_eigen
@@ -64,7 +64,7 @@ c---- declarations for rad_pat
       dimension fmom(6),azep_i(360)
       integer alpha_rp
       complex part2,MEs(360),part2_az,MEs_az,MEs_azepin
-      complex MEs_azepin_plus1,MEs_azepin_minus1
+      complex MEs2(360),MEs2_az,MEs2_azepin
       real*8 X(40),Y(40),U,V,B(40),C(40),D(40)
       real*8 Ueigen_sdpth,Udoteigen_sdpth,Veigen_sdpth,Vdoteigen_sdpth
       real*8 Weigen_sdpth,Wdoteigen_sdpth
@@ -126,8 +126,8 @@ c      real*4 eventt(401501),network(401501),station(401501),az_earth(401501)
       character*16 short_CMTname(max_events)
       logical foundevent
       character*50 input_model,outdir
-      character*1 jcominarg,nmaxinarg
-      character*3 lmaxinarg
+      character*1 jcominarg,nmaxinarg,nmaxin2arg
+      character*3 lmaxinarg,lmaxin2arg
       character*10 azep_inarg
       real*8 azep_in
       character*6 station
@@ -137,9 +137,9 @@ c      real*4 eventt(401501),network(401501),station(401501),az_earth(401501)
 
 c-------------------------------------------------------
 c-------------------- inputs ---------------------------
-c-- example: ./radpat_overtones prem_noocean 3 0 098 202201281114A 70 /data/will/rad_pat/
+c-- example: ./excitation_ratios prem_noocean.txt 3 0 1 098 202201281114A 70 /data/will/excitation_ratios/
 c First, make sure the right number of inputs have been provided
-      IF(COMMAND_ARGUMENT_COUNT().NE.18)THEN
+      IF(COMMAND_ARGUMENT_COUNT().NE.9)THEN
       WRITE(*,*)'ERROR, INCORRECT N. INPUT ARGUMENTS, STOPPING'
       STOP
       ENDIF
@@ -147,30 +147,24 @@ c First, make sure the right number of inputs have been provided
       CALL GET_COMMAND_ARGUMENT(1,input_model)
       CALL GET_COMMAND_ARGUMENT(2,jcominarg)
       CALL GET_COMMAND_ARGUMENT(3,nmaxinarg)
-      CALL GET_COMMAND_ARGUMENT(4,lmaxinarg)
-      CALL GET_COMMAND_ARGUMENT(5,evnam)
-      CALL GET_COMMAND_ARGUMENT(6,azep_inarg)
-      CALL GET_COMMAND_ARGUMENT(7,outdir)
-      CALL GET_COMMAND_ARGUMENT(8,evnam2)
-      CALL GET_COMMAND_ARGUMENT(9,station)
-      CALL GET_COMMAND_ARGUMENT(10,net)
-      CALL GET_COMMAND_ARGUMENT(11,stlat)
-      CALL GET_COMMAND_ARGUMENT(12,stlon)
-      CALL GET_COMMAND_ARGUMENT(13,evlat)
-      CALL GET_COMMAND_ARGUMENT(14,evlon)
-      CALL GET_COMMAND_ARGUMENT(15,Ampfl)
-      CALL GET_COMMAND_ARGUMENT(16,error)
-      CALL GET_COMMAND_ARGUMENT(17,mima)
-      CALL GET_COMMAND_ARGUMENT(18,nsim)
+      CALL GET_COMMAND_ARGUMENT(4,nmaxin2arg)
+      CALL GET_COMMAND_ARGUMENT(5,lmaxinarg)
+      CALL GET_COMMAND_ARGUMENT(6,lmaxin2arg)
+      CALL GET_COMMAND_ARGUMENT(7,evnam)
+      CALL GET_COMMAND_ARGUMENT(8,azep_inarg)
+      CALL GET_COMMAND_ARGUMENT(9,outdir)
 
       read(jcominarg,*)jcomin
       read(nmaxinarg,*)nmaxin
+      read(nmaxin2arg,*)nmaxin2
       read(lmaxinarg,*)lmaxin
+      read(lmaxin2arg,*)lmaxin2
       read(azep_inarg,*)azep_in
 
 c      write(*,*)'input model = ',input_model
-c      write(*,*)'jcom = ',jcomin
+      write(*,*)'jcom = ',jcomin
 c      write(*,*)'nmax= ',nmaxin
+c      write(*,*)'nmax2= ',nmaxin2
 c      write(*,*)'lmax = ',lmaxin
 c      write(*,*)'evnam = ',evnam
 c      write(*,*)'input azimuth = ',azep_in
@@ -217,29 +211,6 @@ c-----  load input model
       close(112)
 
   201 format(f8.0,3f9.2,2f9.1,2f9.2,f9.5)
-c-----------------------------------------------------------------------
-c------------------------- input parameters ----------------------------
-c-----------------------------------------------------------------------
-
-c ------- jcom - 1=radial, 2=toroidal, 3=spheroidal, 4=inner core toroidal
-c ------- eps - 10−7 for periods > 10 s. 10−12 − 10−10 for periods between 5-10 s
-c ------- wgrav - frequency in millihertz (mHz) above which gravitational terms are neglected; this gives about a factor of 3 increase in speed.
-
-      jcomin=jcomin
-      epsin=1e-7
-      wgravin=10
-      lminin=lmaxin
-      lmaxin=lmaxin
-      wminin=0
-      wmaxin=166.0
-      nminin=nmaxin
-      nmaxin=nmaxin
-c-----------------------------------------------------------------------
-
-      call forward_model_mineos(
-     1 phvel_all,grvel_all,lorder_all,attn_all,per_all,jcomin,epsin,
-     1 wgravin,lminin,lmaxin,wminin,wmaxin,nminin,nmaxin,
-     1 model_file,outputs_dir,premnm)
 
 c-----------------------------------------------------------------------
 cc open new GCMT file and read (WS)
@@ -1089,62 +1060,49 @@ c-------------------------------------------------------------------------------
       xm(4)=Mrt(j)
       xm(5)=Mrp(j)
       xm(6)=Mtp(j)
-c the order is Mrr, Mtt, Mpp, Mrt, Mrp, Mtp
 
-c      write(*,*) 'evnam new ',evnam
-c      write(*,*) 'source depth ',sdpth
-c      write(*,*)'exponent ',exponentx
+c-----------------------------------------------------------------------
+c------------------------- input parameters ----------------------------
+c-----------------------------------------------------------------------
 
-c eigenfunctions at the surface - will need to change this to the correct source depth
-c I had to multiply by -1 so that is matches the modes in the mode files....
+c ------- jcom - 1=radial, 2=toroidal, 3=spheroidal, 4=inner core toroidal
+c ------- eps - 10−7 for periods > 10 s. 10−12 − 10−10 for periods between 5-10 s
+c ------- wgrav - frequency in millihertz (mHz) above which gravitational terms are neglected; this gives about a factor of 3 increase in speed.
 
       if (jcomin==3) then
-            Ueigen=buf(1:premnm)*(-1)
-            Udoteigen=buf(premnm+1:premnm*2)*(-1)
-            Veigen=buf(premnm*2+1:premnm*3)*(-1)
-            Vdoteigen=buf(premnm*3+1:premnm*4)*(-1)
-c            Peigen=buf(premnm*5)*(-1)
-c            Pdoteigen=buf(premnm*6)*(-1)
-c            write(*,*)'U --- ',Ueigen
-c            write(*,*)'Udot --- ',Udoteigen
-c            write(*,*)'V --- ',Veigen
-c            write(*,*)'Vdot --- ',Vdoteigen
-c            write(*,*)'P --- ',Peigen
-c            write(*,*)'Pdot --- ',Pdoteigen
-      elseif (jcomin==2) then
-            Weigen=buf(1:premnm)*(-1)
-            Wdoteigen=buf(premnm+1:premnm*2)*(-1)
-c            write(*,*)'W --- ',Weigen
-c            write(*,*)"Wdot --- ",Wdoteigen
-      end if
-      
-c tweaking radius to ensure there are no repeated values for the interpolation
-      do i=premnm-40,premnm
-      if (prrad(i)==prrad(i+1)) then
-c      write(*,*) i,'radius duplicate'
-      prrad(i)=prrad(i)-1
-      endif
-      enddo 
+
+      jcomin=jcomin
+      epsin=1e-7
+      wgravin=10
+      lminin=lmaxin
+      lmaxin=lmaxin
+      wminin=0
+      wmaxin=166.0
+      nminin=nmaxin
+      nmaxin=nmaxin
+c-----------------------------------------------------------------------
+
+      call forward_model_mineos(
+     1 phvel_all,grvel_all,lorder_all,attn_all,per_all,jcomin,epsin,
+     1 wgravin,lminin,lmaxin,wminin,wmaxin,nminin,nmaxin,
+     1 model_file,outputs_dir,premnm)
+
+c eigenfunctions at source depth
+c I multiply by -1 so that is matches the modes in the mode files....
+
+        Ueigen=buf(1:premnm)*(-1)
+        Udoteigen=buf(premnm+1:premnm*2)*(-1)
+        Veigen=buf(premnm*2+1:premnm*3)*(-1)
+        Vdoteigen=buf(premnm*3+1:premnm*4)*(-1)
 
 c---- check is sdpth already exists in input model
       do j=1,premnm
       if (6371000-(sdpth*1000) == prrad(j)) then
 c      write(*,*) 'source depth exists in input model'
-      if (jcomin==3) then 
       Ueigen_sdpth=Ueigen(j)
       Udoteigen_sdpth=Udoteigen(j)
       Veigen_sdpth=Veigen(j)
       Vdoteigen_sdpth=Vdoteigen(j)
-c      write(*,*) '1.Ueigen_sdpth ',Ueigen_sdpth
-c      write(*,*) '1.Udoteigen_sdpth ',Udoteigen_sdpth
-c      write(*,*) '1.Veigen_sdpth ',Veigen_sdpth
-c      write(*,*) '1.Vdoteigen_sdpth ',Vdoteigen_sdpth
-      elseif (jcomin==2) then
-      Weigen_sdpth=Weigen(j)
-      Wdoteigen_sdpth=Wdoteigen(j)
-c      write(*,*) '1.Weigen_sdpth ',Weigen_sdpth
-c      write(*,*) '1.Wdoteigen_sdpth ',Wdoteigen_sdpth
-      endif
       goto 11
       else
 c      write(*,*)'need to interpolate'
@@ -1154,12 +1112,9 @@ c      write(*,*)'need to interpolate'
 c else perform linear interepolation between the layers above and below
       do i=1,premnm
         if (prrad(i)<=(6371000-(sdpth*1000))) then
-c        write(*,*) (prrad(i)), 6371000-(sdpth*1000)
         nlines=nlines+1
         endif
       enddo
-
-      if (jcomin==3) then
 
        Ueigen_sdpth=(Ueigen(nlines)*(prrad(nlines+1)
      1 -(6371000-(sdpth*1000)))+(Ueigen(nlines+1)
@@ -1181,26 +1136,6 @@ c        write(*,*) (prrad(i)), 6371000-(sdpth*1000)
      1 *((6371000-(sdpth*1000))-prrad(nlines))))/
      1 (prrad(nlines+1)-prrad(nlines))
 
-c      write(*,*)'2.Ueigen_spdth ',Ueigen_sdpth
-c      write(*,*)'2.Udoteigen_spdth ',Udoteigen_sdpth
-c      write(*,*)'2.Veigen_spdth ',Veigen_sdpth
-c      write(*,*)'2.Vdoteigen_spdth ',Vdoteigen_sdpth
-
-      elseif (jcomin==2) then
-        Weigen_sdpth=(Weigen(nlines)*(prrad(nlines+1)
-     1 -(6371000-(sdpth*1000)))+(Weigen(nlines+1)
-     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
-     1 (prrad(nlines+1)-prrad(nlines))
-
-       Wdoteigen_sdpth=(Wdoteigen(nlines)*(prrad(nlines+1)
-     1 -(6371000-(sdpth*1000)))+(Wdoteigen(nlines+1)
-     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
-     1 (prrad(nlines+1)-prrad(nlines))
-
-c      write(*,*)'2.Weigen_spdth ',Weigen_sdpth
-c      write(*,*)'2.Wdoteigen_spdth ',Wdoteigen_sdpth
-      endif
-
    11 continue
 
       alpha_rp=0 ! surface wave orbit 
@@ -1211,12 +1146,11 @@ c      write(*,*)'2.Wdoteigen_spdth ',Wdoteigen_sdpth
 C Moment tensor components !why -30???? ask Ana.
       do i=1,6
       fmom(i)=xm(i)*(10.0**(exponentx-30)) 
-c      write(*,*) 'Ms ',fmom(i)
       enddo
 
 c------------ Rayleigh waves
 c M:Es* (MEs) - Table A1 - Ferreira & Woodhouse 2006.
-      if (jcomin==3) then
+c      if (jcomin==3) then
       azep_inx=NINT(azep_in)
       do i=1,360
 
@@ -1239,50 +1173,210 @@ c M:Es* (MEs) - Table A1 - Ferreira & Woodhouse 2006.
 
       enddo
 
-       MEs_azepin=MEs(azep_inx)
-       MEs_azepin_plus1=MEs(azep_inx+1)
-       MEs_azepin_minus1=MEs(azep_inx-1)
+       MEs_azepin=MEs(azep_inx)*1000
 
-c       write(*,*)'MEs in ',abs(MEs_azepin)
-c       write(*,*)'MEs in+1 ',abs(MEs_azepin_plus1)
-c       write(*,*)'MEs in-1 ',abs(MEs_azepin_minus1)
+c=============================================================================================
+c=================== next Rayleigh overtone ==================================================
+c=============================================================================================
 
-c------ write final file output Rayleigh
+      jcomin=jcomin
+      epsin=1e-7
+      wgravin=10
+      lminin=lmaxin2
+      lmaxin=lmaxin2
+      wminin=0
+      wmaxin=166.0
+      nminin=nmaxin2
+      nmaxin=nmaxin2
+c-----------------------------------------------------------------------
 
-c      write(path1,'(A,A,A,A,A,I1.1,A,I3.3,A)') trim(outdir),
-c     1 trim(evnam),"_",trim(input_model),"_n",nmaxin,"_l",
-c     1 lmaxin,"_Rayleigh.txt"
+      call forward_model_mineos(
+     1 phvel_all,grvel_all,lorder_all,attn_all,per_all,jcomin,epsin,
+     1 wgravin,lminin,lmaxin,wminin,wmaxin,nminin,nmaxin,
+     1 model_file,outputs_dir,premnm)
 
-c      open(1,file=path1,status='unknown',access='sequential',
-c     1  position='append')
-c      do i=1,360
-c       azep_i(i)=i*pi/180.
-c       azep=azep_i(i)
+c eigenfunctions at source depth
+c I multiply by -1 so that is matches the modes in the mode files....
 
-c --- this was (pi-azep)*180/pi - not sure why exactly
-c       write(1,*) azep*(180/pi), abs(MEs(i))*1000 
+        Ueigen=buf(1:premnm)*(-1)
+        Udoteigen=buf(premnm+1:premnm*2)*(-1)
+        Veigen=buf(premnm*2+1:premnm*3)*(-1)
+        Vdoteigen=buf(premnm*3+1:premnm*4)*(-1)
 
-c      enddo
-c      close(1)
+c---- check is sdpth already exists in input model
+      do j=1,premnm
+      if (6371000-(sdpth*1000) == prrad(j)) then
+c      write(*,*) 'source depth exists in input model'
+      Ueigen_sdpth=Ueigen(j)
+      Udoteigen_sdpth=Udoteigen(j)
+      Veigen_sdpth=Veigen(j)
+      Vdoteigen_sdpth=Vdoteigen(j)
+      goto 12
+      else
+c      write(*,*)'need to interpolate'
+      endif 
+      enddo
 
-      write(path3,'(A,I1.1,A,I3.3,A)') trim(outdir),
-     1 nmaxin,"S",lmaxin,"_nodality.txt"
+c else perform linear interepolation between the layers above and below
+      do i=1,premnm
+        if (prrad(i)<=(6371000-(sdpth*1000))) then
+        nlines=nlines+1
+        endif
+      enddo
+
+       Ueigen_sdpth=(Ueigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Ueigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+       Udoteigen_sdpth=(Udoteigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Udoteigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+       Veigen_sdpth=(Veigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Veigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+       Vdoteigen_sdpth=(Vdoteigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Vdoteigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+   12 continue
+
+      alpha_rp=0 ! surface wave orbit 
+      a=6371.0 ! earth radius 
+      lambda=lmaxin+0.5 ! a=1
+      aziumth=0
+
+C Moment tensor components !why -30???? ask Ana.
+      do i=1,6
+      fmom(i)=xm(i)*(10.0**(exponentx-30)) 
+      enddo
+
+c------------ Rayleigh waves
+c M:Es* (MEs) - Table A1 - Ferreira & Woodhouse 2006.
+      azep_inx=NINT(azep_in)
+      do i=1,360
+
+      azep_i(i)=i*pi/180.
+      azep=azep_i(i)
+
+      part1=-((Udoteigen_sdpth*fmom(1))+
+     1 (0.5*((2*Ueigen_sdpth)-((lambda**2)*Veigen_sdpth)))
+     1 *(fmom(2)+fmom(3)))
+
+      part2=-cmplx(0,((lambda)*((fmom(4)*cos(pi-azep))
+     1 +(fmom(5)*sin(pi-azep)))))*
+     1 (Vdoteigen_sdpth+(Ueigen_sdpth-Veigen_sdpth))
+
+      part3=((lambda**2)*Veigen_sdpth)*
+     1 ((0.5*(fmom(2)-fmom(3))*
+     1 cos(2*(pi-azep))) +(fmom(6)*sin(2*(pi-azep))))
+
+      MEs2(i)=abs(part1+part2+part3)
+
+      enddo
+
+       MEs2_azepin=MEs2(azep_inx)*1000
+
+      write(path3,'(A,A,A,A,A,A,A,A,A)') trim(outdir),
+     1 nmaxin2arg,'S',lmaxin2arg,'_over_',
+     1 nmaxinarg,'S',lmaxinarg,'_ER.txt'
 
       open(3,file=path3,status='unknown',access='sequential',
      1  position='append')
-       write(3,*)azep_inx,abs(MEs_azepin)*1000,
-     1 abs(MEs_azepin_plus1)*1000,
-     1 abs(MEs_azepin_minus1)*1000,
-     1 station,net,stlat,stlon,evlat,evlon,
-     1 Ampfl,error,mima,nsim
-      close(3)
+       write(3,*)'n=',nmaxinarg,abs(MEs_azepin),
+     1 'n=',nmaxin2arg,abs(MEs2_azepin), 
+     1 abs(MEs2_azepin/MEs_azepin)
+      close(3)      
 
-      elseif (jcomin==2) then
+c=======================================================================
+c======================= Love waves ====================================
+c=======================================================================
 
-c --------- for Love waves
+      elseif (jcomin==2) then 
+
+c-----------------------------------------------------------------------
+c------------------------- input parameters ----------------------------
+c-----------------------------------------------------------------------
+
+c ------- jcom - 1=radial, 2=toroidal, 3=spheroidal, 4=inner core toroidal
+c ------- eps - 10−7 for periods > 10 s. 10−12 − 10−10 for periods between 5-10 s
+c ------- wgrav - frequency in millihertz (mHz) above which gravitational terms are neglected; this gives about a factor of 3 increase in speed.
+
+      jcomin=jcomin
+      epsin=1e-7
+      wgravin=10
+      lminin=lmaxin
+      lmaxin=lmaxin
+      wminin=0
+      wmaxin=166.0
+      nminin=nmaxin
+      nmaxin=nmaxin
+c-----------------------------------------------------------------------
+
+      call forward_model_mineos(
+     1 phvel_all,grvel_all,lorder_all,attn_all,per_all,jcomin,epsin,
+     1 wgravin,lminin,lmaxin,wminin,wmaxin,nminin,nmaxin,
+     1 model_file,outputs_dir,premnm)
+
+c eigenfunctions at source depth
+c I multiply by -1 so that is matches the modes in the mode files....
+
+      Weigen=buf(1:premnm)*(-1)
+      Wdoteigen=buf(premnm+1:premnm*2)*(-1)
+
+c---- check is sdpth already exists in input model
+      do j=1,premnm
+      if (6371000-(sdpth*1000) == prrad(j)) then
+c      write(*,*) 'source depth exists in input model'
+
+      Weigen_sdpth=Weigen(j)
+      Wdoteigen_sdpth=Wdoteigen(j)
+
+      goto 13
+      else
+c      write(*,*)'need to interpolate'
+      endif 
+      enddo
+
+c else perform linear interepolation between the layers above and below
+      do i=1,premnm
+        if (prrad(i)<=(6371000-(sdpth*1000))) then
+        nlines=nlines+1
+        endif
+      enddo
+
+        Weigen_sdpth=(Weigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Weigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+       Wdoteigen_sdpth=(Wdoteigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Wdoteigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+   13 continue
+
+      alpha_rp=0 ! surface wave orbit 
+      a=6371.0 ! earth radius 
+      lambda=lmaxin+0.5 ! a=1
+      aziumth=0
+
+C Moment tensor components !why -30???? ask Ana.
+      do i=1,6
+      fmom(i)=xm(i)*(10.0**(exponentx-30)) 
+      enddo
+
+c------------ Rayleigh waves
 c M:Es* (MEs) - Table A1 - Ferreira & Woodhouse 2006.
-      do i=1,360
+c      if (jcomin==3) then
       azep_inx=NINT(azep_in)
+      do i=1,360
 
       azep_i(i)=i*pi/180.
       azep=azep_i(i)
@@ -1296,39 +1390,110 @@ c M:Es* (MEs) - Table A1 - Ferreira & Woodhouse 2006.
      1 sin(2*(pi-azep))) -(fmom(6)*cos(2*(pi-azep))))
 
       MEs(i)=abs(part1+part2)
+
       enddo
 
-       MEs_azepin=MEs(azep_inx)
-       MEs_azepin_plus1=MEs(azep_inx+1)
-       MEs_azepin_minus1=MEs(azep_inx-1)
+       MEs_azepin=MEs(azep_inx)*1000
 
-c------ write final file output Love
+c=======================================================================
+c======================= Love waves overtone ===========================
+c=======================================================================
 
-c      write(path2,'(A,A,A,A,A,I1.1,A,I3.3,A)') trim(outdir),
-c     1 trim(evnam),"_",trim(input_model),"_n",nmaxin,"_l",
-c     1 lmaxin,"_Love.txt"
+      jcomin=jcomin
+      epsin=1e-7
+      wgravin=10
+      lminin=lmaxin2
+      lmaxin=lmaxin2
+      wminin=0
+      wmaxin=166.0
+      nminin=nmaxin2
+      nmaxin=nmaxin2
+c-----------------------------------------------------------------------
 
-c      open(2,file=path2,status='unknown',access='sequential',
-c     1  position='append')
-c      do i=1,360
-c       azep_i(i)=i*pi/180.
-c       azep=azep_i(i)
-cc ---- was (pi-azep)*180/pi, not sure why 
-c       write(2,*) azep*(180/pi), abs(MEs(i))*1000
-c      enddo
-c      close(2)
+      call forward_model_mineos(
+     1 phvel_all,grvel_all,lorder_all,attn_all,per_all,jcomin,epsin,
+     1 wgravin,lminin,lmaxin,wminin,wmaxin,nminin,nmaxin,
+     1 model_file,outputs_dir,premnm)
 
-      write(path4,'(A,I1.1,A,I3.3,A)') trim(outdir),
-     1 nmaxin,"T",lmaxin,"_nodality.txt"
+c eigenfunctions at source depth
+c I multiply by -1 so that is matches the modes in the mode files....
 
-      open(4,file=path4,status='unknown',access='sequential',
+        Weigen=buf(1:premnm)*(-1)
+        Wdoteigen=buf(premnm+1:premnm*2)*(-1)
+
+c---- check is sdpth already exists in input model
+      do j=1,premnm
+      if (6371000-(sdpth*1000) == prrad(j)) then
+c      write(*,*) 'source depth exists in input model'
+      Weigen_sdpth=Weigen(j)
+      Wdoteigen_sdpth=Wdoteigen(j)
+      goto 14
+      else
+c      write(*,*)'need to interpolate'
+      endif 
+      enddo
+
+c else perform linear interepolation between the layers above and below
+      do i=1,premnm
+        if (prrad(i)<=(6371000-(sdpth*1000))) then
+        nlines=nlines+1
+        endif
+      enddo
+
+        Weigen_sdpth=(Weigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Weigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+       Wdoteigen_sdpth=(Wdoteigen(nlines)*(prrad(nlines+1)
+     1 -(6371000-(sdpth*1000)))+(Wdoteigen(nlines+1)
+     1 *((6371000-(sdpth*1000))-prrad(nlines))))/
+     1 (prrad(nlines+1)-prrad(nlines))
+
+   14 continue
+
+      alpha_rp=0 ! surface wave orbit 
+      a=6371.0 ! earth radius 
+      lambda=lmaxin+0.5 ! a=1
+      aziumth=0
+
+C Moment tensor components !why -30???? ask Ana.
+      do i=1,6
+      fmom(i)=xm(i)*(10.0**(exponentx-30)) 
+      enddo
+
+c------------ Love waves
+c M:Es* (MEs) - Table A1 - Ferreira & Woodhouse 2006.
+      azep_inx=NINT(azep_in)
+      do i=1,360
+
+      azep_i(i)=i*pi/180.
+      azep=azep_i(i)
+
+      part1=-cmplx(0,((lambda)*
+     1 ((fmom(4)*sin(pi-azep))-(fmom(5)*cos(pi-azep))*
+     1 (Wdoteigen_sdpth - Weigen_sdpth))))
+
+      part2=((lambda**2)*Weigen_sdpth)*
+     1 ((0.5*(fmom(2)-fmom(3))*
+     1 sin(2*(pi-azep))) -(fmom(6)*cos(2*(pi-azep))))
+
+      MEs2(i)=abs(part1+part2)
+
+      enddo
+
+      MEs2_azepin=MEs2(azep_inx)*1000
+
+      write(path3,'(A,A,A,A,A,A,A,A,A)') trim(outdir),
+     1 nmaxinarg,'T',lmaxinarg,'_over_',
+     1 nmaxin2arg,'T',lmaxin2arg,'_ER.txt'
+
+      open(3,file=path3,status='unknown',access='sequential',
      1  position='append')
-       write(4,*)azep_inx,abs(MEs_azepin)*1000,
-     1 abs(MEs_azepin_plus1)*1000,
-     1 abs(MEs_azepin_minus1)*1000,
-     1 station,net,stlat,stlon,evlat,evlon,
-     1 Ampfl,error,mima,nsim
-      close(4)
+       write(3,*)'n=',nmaxinarg,abs(MEs_azepin),
+     1 'n=',nmaxin2arg,abs(MEs2_azepin), 
+     1 abs(MEs2_azepin/MEs_azepin)
+      close(3)      
 
       endif
 
